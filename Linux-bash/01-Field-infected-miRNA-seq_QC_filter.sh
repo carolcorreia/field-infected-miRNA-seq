@@ -1,10 +1,10 @@
-################################################################
-#    MicroRNA-seq of Blood Serum from Field-infected Animals   #
-# - Linux bioinformatics workflow for pre-processing of data - #
-################################################################
+#############################################################
+#  MicroRNA-seq of Blood Serum from Field-infected Animals  #
+# - Linux bioinformatics workflow for data pre-processing - #
+#############################################################
 
 # Author: Carolina N. Correia 
-# Last updated on: 23/07/2020
+# Last updated on: 28/07/2020
 
 ################################
 # Download and files check sum #
@@ -130,9 +130,11 @@ rm -r tmp
 # Trimming of adapter sequence within reads #
 #############################################
 
-# Required software is cutadapt (version 2.9).
+# Required software is cutadapt (version 2.10).
 # Consult manual for details:
 # https://cutadapt.readthedocs.io/en/stable/guide.html
+# Sequence used for adapter trimming comes from :
+# https://support.illumina.com/content/dam/illumina-support/documents/documentation/chemistry_documentation/experiment-design/illumina-adapter-sequences-1000000002694-14.pdf
 
 # Create and enter working directory:
 mkdir /home/workspace/ccorreia/miRNASeq_field/fastq_trimmed
@@ -143,8 +145,9 @@ cd !$
 for file in `find /home/workspace/ccorreia/miRNASeq_field/fastq \
 -name *fastq.gz`; \
 do outfile=`basename $file | perl -p -e 's/.fastq.gz//'`; \
-echo "cutadapt -a TGGAATTCTCGGGTGCCAAGG -O 10 --match-read-wildcards \
---discard-untrimmed -m 17 -o ./${outfile}_trim.fastq.gz $file" \
+echo "cutadapt -a TGGAATTCTCGGGTGCCAAGG --overlap 10 --match-read-wildcards \
+--cores=20 --minimum-length 17 --discard-untrimmed \
+-o ./${outfile}_trim.fastq.gz $file" \
 >> cutadapt.sh; \
 done
 
@@ -187,6 +190,10 @@ adapters\tReads that were too short\tReads written (passing filters)\t" \
 
 rm -r filename.txt processed.txt reads_with_adapters.txt \
 short.txt trimmed.txt trimmed_stats.txt
+
+# Transfer trimming stats file to personal laptop via SCP:
+scp -r \
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/fastq_trimmed/trimming_stats.txt .
 
 ###############################################
 # FastQC quality check of trimmed FASTQ files #
@@ -262,6 +269,12 @@ wc -l base_quality.txt # 48 lines
 grep PASS base_quality.txt | wc -l # 48 lines
 grep WARN base_quality.txt | wc -l # 0 lines
 
+# Check per base N content
+grep 'Per base N content' summary_post-filtering.txt >> N_content.txt
+wc -l N_content.txt # 48 lines
+grep PASS N_content.txt | wc -l # 48 lines
+grep WARN N_content.txt | wc -l # 0 lines
+
 # Transfer compressed folders to personal laptop via SCP
 # and check HTML reports:
 scp -r \
@@ -269,108 +282,3 @@ ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/quality_check/post
 
 # Remove temporary folder and its files:
 rm -r tmp
-
-#######################################
-# Reference genome UMD3.1 preparation #
-#######################################
-
-# Create and enter the reference genome directory:
-mkdir -p /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/source_file
-cd !$
-
-# Download the reference genome UMD3.1 from NCBI into Stampede:
-nohup wget -r -nd \
-"ftp://ftp.ncbi.nlm.nih.gov/genomes/Bos_taurus/Assembled_chromosomes/seq/bt_ref_Bos_taurus_UMD_3.1_*.fa.gz" &
-
-# Uncompress the reference genome UMD3.1 from NCBI:
-gunzip -c bt_ref_Bos_taurus_UMD_3.1_*.fa.gz > Btau_UMD3.1_multi.fa
-gunzip bt_ref_Bos_taurus_UMD_3.1_*.fa.gz
-
-# Modify headers in the reference genome UMD3.1 from NCBI:
-for file in `ls *.fa`; \
-do perl -p -i -e \
-'s/^>(.*)(Bos taurus breed Hereford chromosome )(.{1,2})(\,.*)$/>chr$3 $1$2$3$4/' \
-$file; \
-done
-
-for file in `ls *.fa`; \
-do perl -p -i -e 's/^>(.*)(Bos taurus mitochondrion)(\,.*)$/>chrMT $1$2$3/' \
-$file; \
-done
-
-# Create and enter the reference genome annotation directory:
-mkdir -p /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/annotation_file
-cd !$
-
-# Download the miRNA annotation file from miRBase (based on reference 
-# genome UMD3.1 from NCBI):
-wget ftp://mirbase.org/pub/mirbase/21/genomes/bta.gff3
-
-# Convert the GFF3 annotation file from miRBase to GTF format:
-perl /home/nnalpas/SVN/gff2gtf.pl -i \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/annotation_file/bta.gff3 \
--o /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/annotation_file/Btau_miRNA2016.gtf
-grep -P "\tpre-miRNA\t" Btau_miRNA2016.gtf >> Btau_pre-miRNA2016.gtf
-grep -P "\tmiRNA\t" Btau_miRNA2016.gtf >> Btau_mature-miRNA2016.gtf
-
-##########################################################
-# Preparation of Bos taurus miRNA sequences from miRBase #
-##########################################################
-
-# Go to working directory:
-cd /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta
-# Download the various FASTA files for mature, high confidence mature,
-# precursor(hairpin), and high confidence precursor miRNA sequences
-# from miRBase (version 21):
-wget ftp://mirbase.org/pub/mirbase/21/hairpin.fa.gz
-wget ftp://mirbase.org/pub/mirbase/21/high_conf_hairpin.fa.gz
-wget ftp://mirbase.org/pub/mirbase/21/mature.fa.gz
-wget ftp://mirbase.org/pub/mirbase/21/high_conf_mature.fa.gz
-
-# Uncompress the miRNA FASTA files from miRBase:
-for file in \
-`ls /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta*.gz`; \
-do gzip -d $file; \
-done
-
-# Combine information from miRNA annotation file and mature + high confidence
-# mature FASTA sequences obtained from miRBase:
-perl /home/nnalpas/Scripts/miRNA_info_grepping.pl -fasta \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/mature.fa \
--gff \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/annotation_file/bta.gff3 \
--output mature_miRNA_Btaurus.txt
-
-perl /home/nnalpas/Scripts/miRNA_info_grepping.pl -fasta \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/high_conf_mature.fa \
--gff \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/annotation_file/bta.gff3 \
--output high_conf_mature_miRNA_Btaurus.txt
-
-# Create the mature miRNA FASTA file for Bos taurus sequences only:
-perl /home/nnalpas/SVN/Fasta_keep_value.pl -fasta \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/mature.fa \
--keep Bos -output bta_mature-miRNA.fa
-
-# Create the mature miRNA FASTA file for other all species:
-perl /home/nnalpas/SVN/Fasta_ignore_value.pl -fasta \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/mature.fa \
--ignore Bos -output other_mature-miRNA.fa
-
-# Create the precursor (hairpin) miRNAs FASTA file for Bos taurus sequences only:
-perl /home/nnalpas/SVN/Fasta_keep_value.pl -fasta \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/hairpin.fa \
--keep Bos -output bta_hairpin-miRNA.fa
-
-######################
-# Following analyses #
-######################
-
-# Continue pipeline to generate counts per miRNA via two different methods,
-# consult the appropriate pipelines:
-
-# Method 1: Novoalign-featureCounts softwares,
-# see pipeline "BioValidation-miRNA_Novoalign-featureCounts.sh"
-
-# Method 2: miRdeep2 software,
-# see pipeline "BioValidation-miRNA_miRdeep2.sh"
