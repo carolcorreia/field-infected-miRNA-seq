@@ -75,43 +75,21 @@ extract_miRNAs.pl mature.fa chi,oar,ssc,eca,cel,hsa,mmu,rno > other_mature.fa
 extract_miRNAs.pl hairpin.fa bta > bta_hairpin.fa
 extract_miRNAs.pl hairpin_high_conf.fa bta > bta_hairpin_high_conf.fa
 
-########################################################################
-# Merge and uncompress miRNA-seq FASTQ files to be used with miRDeep2  #
-########################################################################
-
-# Create and enter temporary working directory:
-mkdir $HOME/scratch/miRNAseqValidation/fastq_sequence/tmp
-cd !$
-
-# Create bash script to uncompress and merge trim.fast.gz from lanes
-# 005 and 006 for each library:
-for file in `find $HOME/scratch/miRNAseqValidation/fastq_sequence \
--name *_L005_R1_001_trim.fastq.gz`; \
-do file2=`echo $file | perl -p -e 's/(_L005_)/_L006_/'`; \
-sample=`basename $file | perl -p -e 's/(E\d+_)\w+_L\d+_R\d_\d*_trim.fastq.gz/$1/'`; \
-echo "zcat $file $file2 > ${sample}trim.fastq" \
->> uncompress_merge.sh; \
-done
-
-# Run script:
-chmod 755 uncompress_merge.sh
-nohup ./uncompress_merge.sh &
-
 #######################################
 # Index reference genome using Bowtie #
 #######################################
 
-# Required software is Bowtie 1.1.0, consult manual for details:
+# Required software is Bowtie 1.2.3, consult manual for details:
 # http://bowtie-bio.sourceforge.net/manual.shtml
 
 # Create and enter the Index reference genome directory:
-mkdir -p /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/bowtie1.1.0
+mkdir -p /home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/bowtie1.2.3
 cd !$
 
 # Index the reference genome UMD3.1 using Bowtie:
-nohup bowtie-build \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/source_file/Btau_UMD3.1_multi.fa \
-Btau_UMD3.1_multi &
+nohup bowtie-build --threads 20 \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/source_file/GCA_000003205.6_Btau_5.0.1_genomic.fna \
+Btau_5.0.1_index &
 
 #############################################################
 # Preprocessing of miRNA-seq data using miRDeep2: mapper.pl #
