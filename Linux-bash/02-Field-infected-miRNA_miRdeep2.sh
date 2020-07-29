@@ -4,7 +4,7 @@
 #############################################################################
 
 # Author: Carolina N. Correia 
-# Last updated on: 28/07/2020
+# Last updated on: 29/07/2020
 
 ############################################
 # Genome assembly preparation (Btau_5.0.1) #
@@ -75,9 +75,9 @@ extract_miRNAs.pl mature.fa chi,oar,ssc,eca,cel,hsa,mmu,rno > other_mature.fa
 extract_miRNAs.pl hairpin.fa bta > bta_hairpin.fa
 extract_miRNAs.pl hairpin_high_conf.fa bta > bta_hairpin_high_conf.fa
 
-#######################################
-# Index reference genome using Bowtie #
-#######################################
+#############################
+# Index genome using Bowtie #
+#############################
 
 # Required software is Bowtie 1.2.3, consult manual for details:
 # http://bowtie-bio.sourceforge.net/manual.shtml
@@ -91,41 +91,45 @@ nohup bowtie-build --threads 20 \
 /home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/source_file/GCA_000003205.6_Btau_5.0.1_genomic.fna \
 Btau_5.0.1_index &
 
-#############################################################
-# Preprocessing of miRNA-seq data using miRDeep2: mapper.pl #
-#############################################################
+########################################################################
+# Merge and uncompress miRNA-seq FASTQ files to be used with miRDeep2  #
+########################################################################
 
-# Required software is miRDeep2 v.2.0.0.8, consult manual/tutorial for details:
+# Create and enter temporary working directory:
+mkdir /home/workspace/ccorreia/miRNASeq_field/fastq_merged
+cd !$
+
+# Create bash script to uncompress and merge trim.fast.gz from lanes
+# 005 and 006 for each library:
+for file in `find /home/workspace/ccorreia/miRNASeq_field/fastq_trimmed \
+-name *_L005_R1_001_trim.fastq.gz`; \
+do file2=`echo $file | perl -p -e 's/(_L005_)/_L006_/'`; \
+sample=`basename $file | perl -p -e 's/(E\d+_)\w+_L\d+_R\d_\d*_trim.fastq.gz/$1/'`; \
+echo "zcat $file $file2 > ${sample}trim.fastq" \
+>> uncompress_merge.sh; \
+done
+
+# Run script:
+chmod 755 uncompress_merge.sh
+nohup ./uncompress_merge.sh &
+
+#############################
+# Map miRNA reads to genome #
+#############################
+
+# Required software is miRDeep2 v.0.1.3, consult manual/tutorial for details:
 # https://www.mdc-berlin.de/8551903/en/
 
 # Create and enter the miRDeep2 directory for mapping work:
-mkdir -p $HOME/scratch/miRNAseqValidation/mirdeep2/mapper
+mkdir -p /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper
 cd !$
 
-# Create symbolic links to FASTQ files:
-for file in \
-`ls $HOME/scratch/miRNAseqValidation/fastq_sequence/tmp/*_trim.fastq`; \
-do ln -s \
-$file $HOME/scratch/miRNAseqValidation/mirdeep2/mapper/`basename $file`; \
-done
-
-# Run mapper.pl in one FASTQ file to see if it's working well:
-mapper.pl E10_trim.fastq -e -h -m -o 3 -l 17 -r 50 -q -v -p \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/bowtie1.1.0/Btau_UMD3.1_multi \
--s test_collapsed.fa -t test.arf
-
-###### RUN BOWTIW WITH BEST STRATA TO AVOID SEQ BIAS
-###### <s> A comma-separated list of files containing unpaired reads
-###### to be aligned, or, if -c is specified, the unpaired read sequences
-###### themselves. E.g., this might be lane1.fq,lane2.fq,lane3.fq,lane4.fq, or,
-###### if -c is specified, this might be GGTCATCCT,ACGGGTCGT. Reads may be a
-###### mix of different lengths. If - is specified, Bowtie gets the reads from
-###### the “standard in” filehandle.
 # Create bash script to map miRNA reads to the reference genome:
-for file in `ls *_trim.fastq`; \
+for file in `find /home/workspace/ccorreia/miRNASeq_field/fastq_merged \
+-name *_trim.fastq`; \
 do outfile=`basename $file | perl -p -e 's/_trim\.fastq//'`; \
-echo "mapper.pl $file -e -h -m -o 3 -l 17 -r 50 -q -v -p \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/bowtie1.1.0/Btau_UMD3.1_multi \
+echo "mapper.pl $file -e -h -i -l 18 -m -q -r 50 -v -o 20 \
+-p /home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/bowtie1.2.3/Btau_5.0.1_index \
 -s ${outfile}_collapsed.fa -t ${outfile}.arf" \
 >> mapper.sh; \
 done
