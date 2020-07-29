@@ -145,7 +145,7 @@ done
 # After mapping is finished,
 # generate a master file containing mapping statistics:
 for file in \
-`ls $HOME/scratch/miRNAseqValidation/mirdeep2/mapper/mapper.sh.0*.nohup`; \
+`ls /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/mapper.sh.0*.nohup`; \
 do grep -oP "log_\d+" $file >> ./log_id.txt; \
 grep "total:" $file >> ./totals.txt; \
 paste log_id.txt totals.txt > ./stats.txt; \
@@ -164,7 +164,7 @@ rm -r log_id.txt totals.txt stats.txt stats2.txt
 
 # Get filenames from log ids:
 for file in \
-`ls $HOME/scratch/miRNAseqValidation/mirdeep2/mapper/mapper_logs/mapper.log_*`; \
+`ls /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/mapper_logs/mapper.log_*`; \
 do basename $file | perl -p -e 's/mapper\.(log_\d+)_\d+/$1/' >> log.txt; \
 grep -oP "E\d*_collapsed.fa" $file | perl -p -e 's/(\d+_\w*\d+)_collapsed\.fa/$1/' \
 >> sample.txt; \
@@ -174,7 +174,12 @@ done
 # Delete unnecessary files:
 rm -r log.txt sample.txt
 
-# Transfer mapper_stats.txt and id_sample.txt to laptop via SCP.
+# Transfer mapper_stats.txt and id_sample.txt to laptop via SCP:
+scp \
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/mapper_stats.txt .
+
+scp \
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/id_sample.txt .
 
 ################################################################
 # Quantification of known miRNAs using miRDeep2: quantifier.pl #
