@@ -4,7 +4,7 @@
 #############################################################################
 
 # Author: Carolina N. Correia 
-# Last updated on: 29/07/2020
+# Last updated on: 05/08/2020
 
 ############################################
 # Genome assembly preparation (Btau_5.0.1) #
@@ -23,12 +23,15 @@ gunzip GCA_000003205.6_Btau_5.0.1_genomic.fna.gz
 
 # Modify headers in the reference genome Btau_5.0.1 from NCBI, so that:
 # 1) Sequence headers contain only >chrNUMBER (>chr1, >ch2, ...), in order to match
-# the gff3 file from miRBase. Unplaced contig headers will not be changed.
+# the gff3 file from miRBase. Unplaced contig headers will only contain their ID.
 perl -p -i -e \
 's/^>(.*)(Bos taurus breed Hereford chromosome )(.{1,2})(\,.*)$/>chr$3/' \
 GCA_000003205.6_Btau_5.0.1_genomic.fna
 
 perl -p -i -e 's/^>(.*)(Bos taurus chromosome )(.{1,2})(\,.*)$/>chr$3/' \
+GCA_000003205.6_Btau_5.0.1_genomic.fna
+
+perl -p -i -e 's/^>(.*)(Bos taurus breed Hereford UnplacedContig)(.*)$/>$1/' \
 GCA_000003205.6_Btau_5.0.1_genomic.fna
 
 # Check genome fasta file:
@@ -181,160 +184,142 @@ ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/ma
 scp \
 ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/id_sample.txt .
 
-################################################################
-# Quantification of known miRNAs using miRDeep2: quantifier.pl #
-################################################################
+################################
+# Quantify known mature miRNAs #
+################################
 
 # Create and enter the working directory:
-mkdir -p $HOME/scratch/miRNAseqValidation/mirdeep2/quantifier
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier
 cd !$
 
-# Run quantifier.pl in one FASTA file to see if it's working well:
-quantifier.pl -p \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/bta_hairpin-miRNA.fa \
--m /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/bta_mature-miRNA.fa \
--r $HOME/scratch/miRNAseqValidation/mirdeep2/mapper/E10_collapsed.fa -t bta
-
-# Create a shell script to quantify the mapped mature miRNAs:
-# [You will need the mature and precursor (hairpin) miRNA FASTA files for
-# Bos taurus sequences only. Please refer to the 
-# BioValidation-miRNA-seq_QC_filter.sh script]
+# Create a shell script to quantify miRNAs that mapped to the genome:
 for file in \
-`ls $HOME/scratch/miRNAseqValidation/mirdeep2/mapper/*_collapsed.fa`; \
+`ls /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/*_collapsed.fa`; \
 do outfile=`basename $file | perl -p -e 's/_collapsed.fa//'`; \
-echo "mkdir -p $HOME/scratch/miRNAseqValidation/mirdeep2/quantifier/$outfile; \
-cd $HOME/scratch/miRNAseqValidation/mirdeep2/quantifier/$outfile; \
-quantifier.pl -p \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/bta_hairpin-miRNA.fa \
--m /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/bta_mature-miRNA.fa \
--r $file -t bta" >> quantifier.sh; \
+echo "mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/$outfile; \
+cd /home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/$outfile; \
+quantifier.pl -W -t bta \
+-p /home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_hairpin.fa \
+-m /home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_mature.fa \
+-r $file" >> quantifier.sh; \
 done
 
 # Split and run all scripts on Stampede:
-split -d -l 8 quantifier.sh quantifier.sh.
+split -d -l 12 quantifier.sh quantifier.sh.
 for script in `ls quantifier.sh.*`
 do
 chmod 755 $script
 nohup ./$script > ${script}.nohup &
 done
 
-# Create and enter the working directory for high confidence seqs from miRBase:
-mkdir $HOME/scratch/miRNAseqValidation/mirdeep2/quantifier/high_confidence
+# Collect all mature miRNA read counts:
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/mature_counts
 cd !$
-# Create a shell script to quantify the mapped high confidence mature and
-# precursor (hairpin) miRNAs:
+
 for file in \
-`ls $HOME/scratch/miRNAseqValidation/mirdeep2/mapper/*_collapsed.fa`; \
+`find /home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/E* \
+-name miRNAs_expressed_all_samples*.csv`; \
+do outfile=`echo $file | perl -p -e 's/^.*quantifier\/(.*)\/.*$/$1/'`; \
+cp $file \
+/home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/mature_counts/${outfile}_expressed.csv; \
+done
+
+# Transfer count files to laptop via SCP:
+scp -r \
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/mature_counts .
+
+################################################
+# Quantify known high confidence mature miRNAs #
+################################################
+
+# Create and enter the working directory for high confidence seqs from miRBase:
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/high_confidence
+cd !$
+
+# Create a shell script to quantify high confidence miRNAs that mapped to the genome:
+for file in \
+`ls /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/*_collapsed.fa`; \
 do outfile=`basename $file | perl -p -e 's/_collapsed.fa//'`; \
-echo "mkdir -p $HOME/scratch/miRNAseqValidation/mirdeep2/quantifier/high_confidence/$outfile; \
-cd $HOME/scratch/miRNAseqValidation/mirdeep2/quantifier/high_confidence/$outfile; \
-quantifier.pl -p \
-/workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/high_conf_mature.fa \
--m /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/high_conf_hairpin.fa \
--r $file -t bta" >> quantifier_high_conf.sh; \
+echo "mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/high_confidence/$outfile; \
+cd /home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/high_confidence/$outfile; \
+quantifier.pl -W -t bta \
+-p /home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_mature_high_conf.fa \
+-m /home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_hairpin_high_conf.fa \
+-r $file" >> quantifier_high_conf.sh; \
 done
 
 # Split and run all scripts on Stampede:
-split -d -l 8 quantifier_high_conf.sh quantifier_high_conf.sh.
+split -d -l 12 quantifier_high_conf.sh quantifier_high_conf.sh.
 for script in `ls quantifier_high_conf.sh.*`
 do
 chmod 755 $script
 nohup ./$script > ${script}.nohup &
 done
 
-# Collect all read counts files from regular and high confidence miRNAs for
-# easier transfer into laptop using WinSCP:
-mkdir -p $HOME/scratch/miRNAseqValidation/Counts/mirdeep2/regular
+# Collect all high confidence mature miRNA read counts:
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/high_confidence/mat_high_conf_counts
 cd !$
-for file in `find $HOME/scratch/miRNAseqValidation/mirdeep2/quantifier/E* \
--name miRNAs_expressed_all_samples*.csv`; \
-do outfile=`echo $file | perl -p -e 's/^.*quantifier\/(.*)\/.*$/$1/'`; \
-cp $file \
-$HOME/scratch/miRNAseqValidation/Counts/mirdeep2/regular/${outfile}_expressed.csv; \
-done
 
-mkdir -p $HOME/scratch/miRNAseqValidation/Counts/mirdeep2/high_conf
-cd !$
-for file in `find $HOME/scratch/miRNAseqValidation/mirdeep2/quantifier/high_confidence/E* \
+for file in `find /home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/high_confidence/E* \
 -name miRNAs_expressed_all_samples*.csv`; \
 do outfile=`echo $file | perl -p -e 's/^.*quantifier\/.*\/(.*)\/.*$/$1/'`; \
 cp $file \
-$HOME/scratch/miRNAseqValidation/Counts/mirdeep2/high_conf/${outfile}_expressed_high_conf.csv; \
+/home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/high_confidence/mat_high_conf_counts/${outfile}_expressed_high_conf.csv; \
 done
 
-# After transferring into laptop, delete duplicate count folders:
-cd $HOME/scratch/miRNAseqValidation/Counts
-rm -r mirdeep2/
+# Transfer count files to laptop via SCP:
+scp -r \
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/high_confidence/mat_high_conf_counts .
 
-########################################################################
-# Identification of known and novel miRNAs using miRDeep2: miRDeep2.pl #
-######################################################################## 
+###################################################
+# Identification of known and novel mature miRNAs #
+###################################################
 
 # Create and enter working directory:
-mkdir $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl
 cd !$
 
-# Copy and modify the required fasta files since miRdeep2 software
-# requires no space in headers and no characters other than acgtunACGTUN in
-# the sequences:
-cp /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/source_file/Btau_UMD3.1_multi.fa \
-./Btau_UMD3.1_multi.fa
-cp /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/bta_mature-miRNA.fa \
-./bta_mature-miRNA.fa
-cp /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/high_conf_mature.fa \
-./high_conf_mature.fa
-cp /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/other_mature-miRNA.fa \
-./other_mature-miRNA.fa
-cp /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/bta_hairpin-miRNA.fa \
-./bta_hairpin-miRNA.fa
-cp /workspace/storage/genomes/bostaurus/UMD3.1_NCBI/miRBase_fasta/high_conf_hairpin.fa \
-./high_conf_hairpin.fa
-
-perl -p -i -e 's/^(>.*?)\s.*$/$1/' \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/Btau_UMD3.1_multi.fa
-perl -p -i -e 's/^(>.*?) (.*?) .*$/$1_$2/' \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/bta_mature-miRNA.fa
-perl -p -i -e 's/^(>.*?) (.*$)/$1_$2/' \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/high_conf_mature.fa
-perl -p -i -e 's/^(>.*?) (.*?) .*$/$1_$2/' \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/other_mature-miRNA.fa
-perl -p -i -e 's/^(>.*?) (.*?) .*$/$1_$2/' \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/bta_hairpin-miRNA.fa
-perl -p -i -e 's/^(>.*?) (.*?) (.*?) (.*?) (.*?) .*$/$1_$2/' \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/high_conf_hairpin.fa
-sed -e '/^[^>]/s/[^ATGCatgc]/N/g' high_conf_hairpin.fa > high_conf_hairpin_clean.fa
+# Remove all spaces for miRDeep2.pl script:
+sed -i 's/[[:blank:]]//g' \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/source_file/GCA_000003205.6_Btau_5.0.1_genomic.fna
 
 # Run mirdeep.pl in one FASTA file to see if it's working well:
-miRDeep2.pl $HOME/scratch/miRNAseqValidation/mirdeep2/mapper/E10_collapsed.fa \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/Btau_UMD3.1_multi.fa \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mapper/E10.arf \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/bta_mature-miRNA.fa \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/other_mature-miRNA.fa \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/bta_hairpin-miRNA.fa -t Cow
+miRDeep2.pl /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/E10_collapsed.fa \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/source_file/GCA_000003205.6_Btau_5.0.1_genomic.fna \
+/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/E10.arf \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_mature.fa \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/other_mature.fa \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_hairpin.fa \
+-t Cow
 
 # Create bash script for identification and quantification of known and
-# novel miRNAs:
+# novel mature miRNAs:
 for file in \
-`ls $HOME/scratch/miRNAseqValidation/mirdeep2/mapper/*_collapsed.fa`; \
+`ls /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/*_collapsed.fa`; \
 do outfile=`basename $file | perl -p -e 's/_collapsed.fa//'`; \
-echo "mkdir $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/$outfile; \
-cd $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/$outfile; \
+echo "mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/$outfile; \
+cd /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/$outfile; \
 miRDeep2.pl $file \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/Btau_UMD3.1_multi.fa \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mapper/${outfile}.arf \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/bta_mature-miRNA.fa \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/other_mature-miRNA.fa \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/bta_hairpin-miRNA.fa -t Cow" \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/source_file/GCA_000003205.6_Btau_5.0.1_genomic.fna \
+/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/${outfile}.arf \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_mature.fa \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/other_mature.fa \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_hairpin.fa \
+-t Cow" \
 >> miRdeep2.sh; \
 done
 
 # Split and run all scripts on Stampede:
-split -d -l 8 miRdeep2.sh miRdeep2.sh.
+split -d -l 12 miRdeep2.sh miRdeep2.sh.
 for script in `ls miRdeep2.sh.*`
 do
 chmod 755 $script
 nohup ./$script > ${script}.nohup &
 done
+
+###################################################################
+# Identification of known and novel mature high confidence miRNAs #
+###################################################################
 
 # Create and enter the working directory for high confidence seqs from miRBase:
 mkdir $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/high_confidence
