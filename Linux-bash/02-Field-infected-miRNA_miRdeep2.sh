@@ -4,7 +4,7 @@
 #############################################################################
 
 # Author: Carolina N. Correia 
-# Last updated on: 05/08/2020
+# Last updated on: 06/08/2020
 
 ############################################
 # Genome assembly preparation (Btau_5.0.1) #
@@ -75,6 +75,7 @@ done
 extract_miRNAs.pl mature.fa bta > bta_mature.fa
 extract_miRNAs.pl mature_high_conf.fa bta > bta_mature_high_conf.fa
 extract_miRNAs.pl mature.fa chi,oar,ssc,eca,cel,hsa,mmu,rno > other_mature.fa
+extract_miRNAs.pl mature_high_conf.fa chi,oar,ssc,eca,cel,hsa,mmu,rno > other_mature_high_conf.fa
 extract_miRNAs.pl hairpin.fa bta > bta_hairpin.fa
 extract_miRNAs.pl hairpin_high_conf.fa bta > bta_hairpin_high_conf.fa
 
@@ -271,9 +272,9 @@ done
 scp -r \
 ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/quantifier/high_confidence/mat_high_conf_counts .
 
-###################################################
-# Identification of known and novel mature miRNAs #
-###################################################
+##########################################
+# Identify known and novel mature miRNAs #
+##########################################
 
 # Create and enter working directory:
 mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl
@@ -282,15 +283,6 @@ cd !$
 # Remove all spaces for miRDeep2.pl script:
 sed -i 's/[[:blank:]]//g' \
 /home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/source_file/GCA_000003205.6_Btau_5.0.1_genomic.fna
-
-# Run mirdeep.pl in one FASTA file to see if it's working well:
-miRDeep2.pl /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/E10_collapsed.fa \
-/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/source_file/GCA_000003205.6_Btau_5.0.1_genomic.fna \
-/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/E10.arf \
-/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_mature.fa \
-/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/other_mature.fa \
-/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_hairpin.fa \
--t Cow
 
 # Create bash script for identification and quantification of known and
 # novel mature miRNAs:
@@ -317,77 +309,104 @@ chmod 755 $script
 nohup ./$script > ${script}.nohup &
 done
 
-###################################################################
-# Identification of known and novel mature high confidence miRNAs #
-###################################################################
+# Collect all mature miRNA read counts:
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/mature_counts
+cd !$
+
+for file in \
+`find /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/E* \
+-name miRNAs_expressed_all_samples*.csv`; \
+do outfile=`echo $file | perl -p -e 's/^.*\/(E\d+)\/.*$/$1/'`; \
+cp $file \
+/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/mature_counts/${outfile}_exp_mirdeep.csv; \
+done
+
+# Transfer count files to laptop via SCP:
+scp -r \
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/mature_counts .
+
+# Collet data from predicted novel mature miRNAs into one folder:
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/novel_mature
+cd !$
+
+for file in `find /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/E* \
+-name result_*.csv`; \
+do outfile=`basename $file | perl -p -e 's/result_.+(\.csv)/novel_mature$1/'`; \
+sample=`dirname $file | perl -p -e 's/.+\/(E\d+).*/$1/'`; \
+cp $file ./$sample\_$outfile; \
+done
+
+# Transfer folder to laptop via SCP:
+scp -r \
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/novel_mature .
+
+##########################################################
+# Identify known and novel mature high confidence miRNAs #
+##########################################################
 
 # Create and enter the working directory for high confidence seqs from miRBase:
-mkdir $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/high_confidence
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/high_confidence
 cd !$
 
 # Create bash script for identification and quantification of
 # high confidence miRNAs:
 for file in \
-`ls $HOME/scratch/miRNAseqValidation/mirdeep2/mapper/*_collapsed.fa`; \
+`ls /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/*_collapsed.fa`; \
 do outfile=`basename $file | perl -p -e 's/_collapsed.fa//'`; \
 echo \
-"mkdir $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/high_confidence/$outfile; \
-cd $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/high_confidence/$outfile; \
+"mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/high_confidence/$outfile; \
+cd /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/high_confidence/$outfile; \
 miRDeep2.pl $file \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/Btau_UMD3.1_multi.fa \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mapper/${outfile}.arf \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/high_conf_mature.fa \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/other_mature-miRNA.fa \
-$HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/high_conf_hairpin_clean.fa \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/source_file/GCA_000003205.6_Btau_5.0.1_genomic.fna \
+/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mapper/${outfile}.arf \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_mature_high_conf.fa \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/other_mature_high_conf.fa \
+/home/workspace/genomes/bostaurus/Btau_5.0.1_NCBI/miRBase_fasta/bta_hairpin_high_conf.fa \
 -t Cow" \
 >> miRdeep2_high-conf.sh; \
 done
 
 # Split and run all scripts on Stampede:
-split -d -l 8 miRdeep2_high-conf.sh miRdeep2_high-conf.sh.
+split -d -l 12 miRdeep2_high-conf.sh miRdeep2_high-conf.sh.
 for script in `ls miRdeep2_high-conf.sh.*`
 do
 chmod 755 $script
 nohup ./$script > ${script}.nohup &
 done
 
-# Collect all read counts files from regular and high confidence miRNAs for
-# transfering into laptop using WinSCP:
-mkdir -p $HOME/scratch/miRNAseqValidation/Counts/mirdeep.pl/regular
+
+
+# Collect all high confidence mature miRNA read counts:
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/mature_counts
 cd !$
-for file in `find $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/E* \
+
+for file in \
+`find /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/E* \
 -name miRNAs_expressed_all_samples*.csv`; \
-do outfile=`echo $file | perl -p -e 's/^.*mirdeep\/(.*)\/.*$/$1/'`; \
+do outfile=`echo $file | perl -p -e 's/^.*\/(E\d+)\/.*$/$1/'`; \
 cp $file \
-$HOME/scratch/miRNAseqValidation/Counts/mirdeep.pl/regular/${outfile}_exp_mirdeep.csv; \
+/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/mature_counts/${outfile}_exp_mirdeep.csv; \
 done
 
-mkdir -p $HOME/scratch/miRNAseqValidation/Counts/mirdeep.pl/high_conf
-cd !$
-for file in `find $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/high_confidence/E* \
--name result*.csv`; \
-do outfile=`echo $file | perl -p -e 's/^.*mirdeep\/.*\/(.*)\/.*$/$1/'`; \
-cp $file \
-$HOME/scratch/miRNAseqValidation/Counts/mirdeep.pl/high_conf/${outfile}_novel_hc.csv; \
-done
+# Transfer count files to laptop via SCP:
+scp -r \
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/mature_counts .
 
-# Collet data from predicted novel miRNAs into one folder:
-mkdir $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/novel_miRNAs
+# Collet data from predicted novel mature miRNAs into one folder:
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/novel_mature
 cd !$
-for file in `find $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/E* \
+
+for file in `find /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/E* \
 -name result_*.csv`; \
-do outfile=`basename $file | perl -p -e 's/result_.+(\.csv)/novel_miRNAs$1/'`; \
-sample=`dirname $file | perl -p -e 's/.+mirdeep\/(E\d+).*/$1/'`; \
+do outfile=`basename $file | perl -p -e 's/result_.+(\.csv)/novel_mature$1/'`; \
+sample=`dirname $file | perl -p -e 's/.+\/(E\d+).*/$1/'`; \
 cp $file ./$sample\_$outfile; \
 done
 
-# Clean data to keep only info about novel miRNAs:
-for file in `ls $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/novel_miRNAs/E*_novel_miRNAs.csv`; \
-do outfile=`basename $file | perl -p -e 's/(E\d+)_novel_miRNAs.csv/$1_clean.csv/'`; \
-sed '/provisional id/,$!d' $file | sed '/mature miRBase miRNAs/,$d' > $outfile; \
-done
+# Transfer folder to laptop via SCP:
+scp -r \
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/novel_mature .
 
-# Transfer cleaned files to laptop with SCP.
 
 ##############################
 # isomiR count summarisation #
