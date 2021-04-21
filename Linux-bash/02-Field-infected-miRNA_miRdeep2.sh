@@ -1,10 +1,10 @@
 #############################################################################
 #         MicroRNA-seq of Blood Serum from Field-infected Animals           #
-# - Linux bioinformatics workflow for known and novel miRNAs, and isomiRs - #
+#       - Linux bioinformatics workflow for known and novel miRNAs -        #
 #############################################################################
 
 # Author: Carolina N. Correia 
-# Last updated on: 06/08/2020
+# Last updated on: 21/04/2021
 
 ############################################
 # Genome assembly preparation (Btau_5.0.1) #
@@ -374,67 +374,40 @@ chmod 755 $script
 nohup ./$script > ${script}.nohup &
 done
 
-
-
 # Collect all high confidence mature miRNA read counts:
-mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/mature_counts
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/high_confidence/mat_high_conf_counts
 cd !$
 
 for file in \
-`find /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/E* \
+`find /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/high_confidence/E* \
 -name miRNAs_expressed_all_samples*.csv`; \
 do outfile=`echo $file | perl -p -e 's/^.*\/(E\d+)\/.*$/$1/'`; \
 cp $file \
-/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/mature_counts/${outfile}_exp_mirdeep.csv; \
+/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/high_confidence/mat_high_conf_counts/${outfile}_exp_mirdeep_high_conf.csv; \
 done
 
 # Transfer count files to laptop via SCP:
 scp -r \
-ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/mature_counts .
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/high_confidence/mat_high_conf_counts .
 
 # Collet data from predicted novel mature miRNAs into one folder:
-mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/novel_mature
+mkdir /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/high_confidence/novel_mat_high_conf
 cd !$
 
-for file in `find /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/E* \
+for file in `find /home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/high_confidence/E* \
 -name result_*.csv`; \
-do outfile=`basename $file | perl -p -e 's/result_.+(\.csv)/novel_mature$1/'`; \
+do outfile=`basename $file | perl -p -e 's/result_.+(\.csv)/novel_mat_high_conf$1/'`; \
 sample=`dirname $file | perl -p -e 's/.+\/(E\d+).*/$1/'`; \
 cp $file ./$sample\_$outfile; \
 done
 
 # Transfer folder to laptop via SCP:
 scp -r \
-ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/novel_mature .
+ccorreia@rodeo.ucd.ie:/home/workspace/ccorreia/miRNASeq_field/mirdeep2/mirdeep2.pl/high_confidence/novel_mat_high_conf .
+
+#######
+# End #
+#######
 
 
-##############################
-# isomiR count summarisation #
-##############################
-
-# Process miRDeep2 output files to collect all isoforms read counts files:
-mkdir -p $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/isomiR_counts
-cd !$
-
-for file in `find $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep \
--name "miRBase.mrd"`; \
-do outfile=`echo $file | perl -p -e 's/.+mirdeep\/(E\\d+).+/$1_isomiR.txt/'`; \
-echo "perl $HOME/storage/Scripts/Get_isomiR_count.pl -mrd $file \
--output $HOME/scratch/miRNAseqValidation/mirdeep2/mirdeep/isomiR_counts/$outfile" \
->> isomiR_summarisation.sh; \
-done
-
-# Run the script on Stampede
-chmod 755 isomiR_summarisation.sh
-nohup ./isomiR_summarisation.sh &
-
-# Transfer isomiR count files to laptop with SCP.
-
-########################################
-# R analysis of gene counts with edgeR #
-########################################
-
-# Subsequent sense genes analyses were performed using the R statistical
-# and the edgeR package. Please refer to file:
-# BioValidation-miRNAseq_edgeR_pipeline.R
 
